@@ -125,7 +125,7 @@ class StatXplorer(object):
             
         return req
     
-    def convert_to_dataframe(self, results, include_codes):
+    def convert_to_dataframe(self, results, include_codes, reshape):
         """Convert the results returned from Stat-Xplore into a dataframe."""
         # First generate an ordered list of all the fields we will
         # be using, in human-readable format.
@@ -168,6 +168,11 @@ class StatXplorer(object):
                 data.append(output_row)
                 
         data_pd = pd.DataFrame(data)
+        
+        if not reshape:
+            # We haven't been asked to reshape the data appropriately, so just
+            # return the raw dataframe.
+            return data_pd
     
         # The shape of the dataframe we return is based on the number of
         # fields in the query.
@@ -176,21 +181,59 @@ class StatXplorer(object):
             # field and return it.
             return data_pd.set_index(field_names[0])
         else:
-            # Pivot the data to put the first field as the index, the second as
-            # the columns and the first measure as the primary data.
-            data_pd = data_pd.pivot(index=field_names[0], 
-                                    columns=field_names[1],
-                                    values=results["measures"][0]["label"])
-            data_pd.reset_index(inplace=True)
+            # Pivot the data to flatten it down to a 2D array.  We assume that
+            # the first field in the query is the first dimension, the second
+            # field is the second dimension, and all other fields should be
+            # stacked under the first dimension to create multi-level rows.
+            # All values get passed in at once - if there is more than one
+            # this will create multi-level columns.
+            indices = [field_names[0]]
+            if len(field_names) > 2:
+                indices.extend(field_names[2:])
+            columns = [field_names[1]]
+            
+            # Extract the column labels in their original order, as the pivot
+            # operation will sort them.
+            column_labels = data_pd[field_names[1]].unique()
+            
+            values = [m["label"] for m in results["measures"]]
+            if len(values) == 1:
+                values = values[0]
+            data_pd = pd.pivot_table(data_pd,
+                                     values=values,
+                                     index=indices,
+                                     columns=columns)
+            
+            # Put the columns back in their original order.
+            data_pd = data_pd[column_labels]
+            
             if include_codes:
                 for field_name, code_lookup in field_codes.items():
-                    data_pd[field_name + " code"] = data_pd[field_name].map(
-                        code_lookup)
+                    if len(data_pd.index.names) == 1:
+                        # Single-level index.  This means we can just do a
+                        # lookup on the index values.
+                        data_pd[field_name + " code"] = data_pd.index.map(
+                            code_lookup)
+                    else:
+                        # Multi-level index.  Find the field we're looking for
+                        # in the indices.
+                        field_ix = data_pd.index.names.index(field_name)
+                        lookup = {}
+                        for values in data_pd.index.values:
+                            if values[field_ix] not in code_lookup:
+                                # This is an index value without a code - 
+                                # possibly a Totals row.  Skip it.
+                                continue
+                            lookup[values] = code_lookup[values[field_ix]]
+                        data_pd[field_name + " code"] = data_pd.index.map(
+                            lookup)
+                    data_pd = data_pd.set_index(field_name + " code", 
+                                                append=True)
             
             return data_pd
             
     
-    def fetch_table(self, query, include_codes=False):
+    def fetch_table(self, query, include_codes=False, reshape=True):
         """Get a table from Stat-Xplore.  The best way to use this is with a
         pre-generated JSON query - this method accepts a Python dict 
         representing the query, a file-like object holding it, or a filename 
@@ -205,6 +248,10 @@ class StatXplorer(object):
         
         Setting "include_codes" to True will add an extra column for each field
         that uses ONS codes in its Stat-Xplore URI.
+        
+        Setting "reshape" to False will return a flat dataframe with no
+        reshaping.  Use this and do your own reshaping if the default returns
+        something weird.
         """
             
         if isinstance(query, dict):
@@ -220,7 +267,9 @@ class StatXplorer(object):
             raise RequestFailedError("Query failed - check that it is valid.")
             
         results = req.json()
-        results["data"] = self.convert_to_dataframe(results, include_codes)
+        results["data"] = self.convert_to_dataframe(results, 
+                                                    include_codes, 
+                                                    reshape)
         results["req"] = req
         
         return results

@@ -8,14 +8,21 @@ interface is similar (although modified to make it more Pythonic) and it
 returns data in Pandas dataframes, the closest equivalent to R dataframes.
 
 ## Installation
-Place the statxplorer.py file in the same directory as the module you wish to
-call it from, or somewhere else in your PYTHONPATH. Installation via `pip`
-may be added later!
+You can use `pip` to install `statxplorer` directly from GitHub:
+
+```
+pip install https://github.com/philipbrien/statxplorer/zipball/master
+```
+
+Alternatively, download the statxplorer.py file and place it in the same 
+directory as the module you wish to call it from, or somewhere else in your 
+PYTHONPATH.
 
 ### Prerequisites
 `statxplorer` uses Python 3. You will also need the `pandas` module 
 installed, because all data is returned in the form of a Pandas dataframe, and
-`requests` for accessing the API.
+`requests` for accessing the API. If you install using `pip`, these should be
+installed automatically.
 
 ## Authentication
 You will need a Stat-Xplore key to access the API. You can get this by 

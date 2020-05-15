@@ -22,6 +22,6 @@ setup(
       author_email="brienp@parliament.uk",
       classifiers=["Development Status :: 3 - Alpha",
                    "Programming Language :: Python :: 3"],
-      py_modules="statxplorer.py",
+      packages=['statxplorer'],
       python_requires='>=3',
       install_requires=['pandas', 'requests'])
